@@ -18,6 +18,17 @@ mapping (address => uint) rewards;
 uint public totalSupply;
 mapping (address => uint) balanceOf;
 
+modifier updateReward(address _account){
+    rewardPerTokenStored = rewardPerToken();
+    updatedAt = lastTimeRewardApplicable();
+
+    if(_account != address(0)){
+        rewards[_account] = earned(_account);
+        userRewardPerToken[_account] = rewardPerTokenStored;
+    }
+    _;
+}
+
 modifier onlyOwner(){
     require(msg.sender == owner, "Not owner");
     _;
@@ -34,7 +45,7 @@ require(finishAt < block.timestamp, "reward duration !finished");
 duration = _duration;
 }
 
-function notifyRewardAmount(uint _amount) external onlyOwner{
+function notifyRewardAmount(uint _amount) external onlyOwner updateReward(address(0)){
 if(block.timestamp > finishAt){
     rewardRate = _amount / duration;
 }else{
@@ -49,14 +60,14 @@ require(rewardRate * duration <= rewardToken.balanceOf(address(this)),
  updatedAt = block.timestamp;
 }
 
-function stake(uint _amount) external {
+function stake(uint _amount) external updateReward(msg.sender){
     require(_amount > 0, "Amount = 0");
     stakingToken.transferFrom(msg.sender, address(this), _amount);
     balanceOf[msg.sender]+=_amount;
     totalSupply += _amount;
 }
 
-function withdraw(uint _amount) external {
+function withdraw(uint _amount) external updateReward(msg.sender){
     require(_amount >0,"amount = 0");
     balanceOf[msg.sender] -= _amount;
     totalSupply -= _amount;
@@ -74,16 +85,19 @@ if(totalSupply == 0){
 return rewardPerTokenStored + (rewardRate * (lastTimeRewardApplicable())* 1e18) /totalSupply;
 }
 
-function earned(address _account) external view returns (uint){
+function earned(address _account) public  view returns (uint){
     return (balanceOf[_account] * (rewardPerToken() - userRewardPerToken[_account])/1e18) + rewards[_account];
 }
-function getReward()external {}
+function getReward()external updateReward(msg.sender){
+    uint reward = rewards[msg.sender];
+    if(reward > 0){
+        rewards[msg.sender] = 0;
+        rewardToken.transfer(msg.sender, reward);
+    }
+}
 
 function _min(uint x, uint y) private pure  returns (uint){
     return x <= y ? x: y;
 }
-
-
-
 
 }
